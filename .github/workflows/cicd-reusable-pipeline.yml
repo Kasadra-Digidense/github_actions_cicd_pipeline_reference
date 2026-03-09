@@ -41,6 +41,18 @@ on:
         required: false
         type: string
 
+      codeartifact_domain:
+        required: false
+        type: string
+
+      codeartifact_repo:
+        required: false
+        type: string
+
+      domain_owner:
+        required: false
+        type: string      
+
 
 permissions:
   id-token: write
