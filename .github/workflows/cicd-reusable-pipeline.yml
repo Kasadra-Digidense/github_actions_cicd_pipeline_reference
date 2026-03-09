@@ -12,42 +12,34 @@ on:
       aws_region:
         required: false
         type: string
-        default: us-east-1
 
       gcp_region:
         required: false
         type: string
-        default: us-central1
 
       java_dir:
         required: false
         type: string
-        default: java_springboot
 
       python_dir:
         required: false
         type: string
-        default: python_app
 
       node_dir:
         required: false
         type: string
-        default: react_node_app
 
       image_name:
         required: false
         type: string
-        default: multiapp
 
       ecr_repo:
         required: false
         type: string
-        default: demos/multiapp
 
       helm_chart_path:
         required: false
         type: string
-        default: ./helm
 
 
 permissions:
@@ -60,20 +52,15 @@ env:
   JAVA_DIR: ${{ inputs.java_dir }}
   PYTHON_DIR: ${{ inputs.python_dir }}
   NODE_DIR: ${{ inputs.node_dir }}
-
   IMAGE_NAME: ${{ inputs.image_name }}
-
   VERSION: v${{ github.run_number }}
-
   ECR_REPO: ${{ inputs.ecr_repo }}
-
   AWS_REGION: ${{ inputs.aws_region }}
-
   GCP_REGION: ${{ inputs.gcp_region }}
-
   HELM_PATH: ${{ inputs.helm_chart_path }}
-
-
+  CODEARTIFACT_DOMAIN: ${{ inputs.codeartifact_domain }}
+  CODEARTIFACT_REPO: ${{ inputs.codeartifact_repo }}
+  DOMAIN_OWNER: ${{ inputs.domain_owner }}
 
 # ==========================================================
 # BUILD & TEST
@@ -142,7 +129,179 @@ jobs:
           npm install
           npm test -- --watchAll=false
 
-
+# ==========================================================
+# UPLOAD ARTIFACT
+# ==========================================================
+  upload-artifact:
+    runs-on: ubuntu-latest  
+    steps:
+      # ---------------- Checkout Code ----------------
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+  
+      # ---------------- AWS LOGIN ----------------
+      - name: Configure AWS Credentials
+        if: inputs.cloud == 'aws'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::088310115913:role/OpenID-Connect
+          aws-region: ${{ inputs.aws_region }}
+  
+      # ---------------- Upload Full Repo Artifact ----------------
+      - name: Upload Full Repo
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-file
+          path: |
+            .
+            !node_modules/**
+            !__pycache__/**
+            !image.tar
+  
+      # ==========================================================
+      # ================= JAVA → CODEARTIFACT ====================
+      # ==========================================================
+  
+      - name: Setup Java
+        if: hashFiles('java_springboot/pom.xml') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+  
+      - name: Deploy Java to CodeArtifact
+        if: inputs.cloud == 'aws' && hashFiles('java_springboot/pom.xml') != ''
+        run: |
+          cd java_springboot
+  
+          VERSION=0.0.${{ github.run_number }}
+  
+          CODEARTIFACT_AUTH_TOKEN=$(aws codeartifact get-authorization-token \
+            --domain $CODEARTIFACT_DOMAIN \
+            --domain-owner $DOMAIN_OWNER \
+            --query authorizationToken \
+            --output text \
+            --region $AWS_REGION)
+  
+          mkdir -p ~/.m2
+  
+          cat > ~/.m2/settings.xml <<EOF
+          <settings>
+            <servers>
+              <server>
+                <id>$CODEARTIFACT_DOMAIN-$CODEARTIFACT_REPO</id>
+                <username>aws</username>
+                <password>${CODEARTIFACT_AUTH_TOKEN}</password>
+              </server>
+            </servers>
+          </settings>
+          EOF
+  
+          mvn versions:set -DnewVersion=$VERSION
+          mvn clean deploy \
+            -DaltDeploymentRepository=$CODEARTIFACT_DOMAIN-$CODEARTIFACT_REPO::default::https://$CODEARTIFACT_DOMAIN-$DOMAIN_OWNER.d.codeartifact.$AWS_REGION.amazonaws.com/maven/$CODEARTIFACT_REPO/ \
+            -DskipTests
+  
+      # ==========================================================
+      # ================= PYTHON → CODEARTIFACT ==================
+      # ==========================================================
+  
+      - name: Setup Python
+        if: hashFiles('python_app/requirements.txt') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+  
+      - name: Deploy Python to CodeArtifact
+        if: inputs.cloud == 'aws' && hashFiles('python_app/requirements.txt') != ''
+        run: |
+          cd python_app
+  
+          pip install build twine
+          python -m build
+  
+          aws codeartifact login \
+            --tool twine \
+            --domain $CODEARTIFACT_DOMAIN \
+            --domain-owner $DOMAIN_OWNER \
+            --repository $CODEARTIFACT_REPO \
+            --region $AWS_REGION
+  
+          twine upload dist/*
+  
+      # ==========================================================
+      # ================= NODE → CODEARTIFACT ====================
+      # ==========================================================
+  
+      - name: Setup Node
+        if: hashFiles('react_node_app/package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+  
+      - name: Deploy Node to CodeArtifact
+        if: inputs.cloud == 'aws' && hashFiles('react_node_app/package.json') != ''
+        run: |
+          cd react_node_app
+  
+          aws codeartifact login \
+            --tool npm \
+            --domain $CODEARTIFACT_DOMAIN \
+            --domain-owner $DOMAIN_OWNER \
+            --repository $CODEARTIFACT_REPO \
+            --region $AWS_REGION
+  
+          npm publish
+  
+      # ==========================================================
+      # ================= GCP ARTIFACT REGISTRY ==================
+      # ==========================================================
+  
+      - name: Authenticate to GCP
+        if: inputs.cloud == 'gcp'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+  
+      - name: Setup GCloud SDK
+        if: inputs.cloud == 'gcp'
+        uses: google-github-actions/setup-gcloud@v2
+  
+      - name: Push Full Repo Artifact to GCP
+        if: inputs.cloud == 'gcp'
+        run: |
+          zip -r full-repo.zip .
+  
+          gcloud artifacts generic upload \
+            --location=$GCP_REGION \
+            --repository=my-repo \
+            --package=full-repo \
+            --version=$VERSION \
+            --source=full-repo.zip
+  
+      # ==========================================================
+      # ================= AZURE ARTIFACTS ========================
+      # ==========================================================
+  
+      - name: Azure Login
+        if: inputs.cloud == 'azure'
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+  
+      - name: Push Full Repo Artifact to Azure
+        if: inputs.cloud == 'azure'
+        run: |
+          zip -r full-repo.zip .
+  
+          az artifacts universal publish \
+            --organization https://dev.azure.com/my-org \
+            --feed my-feed \
+            --name full-repo \
+            --version $VERSION \
+            --description "Full repo artifact" \
+            --path full-repo.zip
 
 # ==========================================================
 # DOCKER BUILD & PUSH
@@ -307,7 +466,6 @@ jobs:
             --region $GCP_REGION \
             --project ${{ secrets.GCP_PROJECT_ID }}
 
-
       - name: Helm Deploy GKE
         if: inputs.cloud == 'gcp'
         run: |
@@ -325,14 +483,12 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-
       - name: Connect AKS
         if: inputs.cloud == 'azure'
         run: |
           az aks get-credentials \
             --resource-group ${{ secrets.AKS_RG }} \
             --name ${{ secrets.AKS_CLUSTER }}
-
 
       - name: Helm Deploy AKS
         if: inputs.cloud == 'azure'
