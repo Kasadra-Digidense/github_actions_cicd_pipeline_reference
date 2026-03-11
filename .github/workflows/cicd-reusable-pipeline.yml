@@ -464,7 +464,9 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: sonar-scan
+    needs:
+    - sonar-scan
+    - snyk-scan
     steps:
       - uses: actions/checkout@v4
       - name: Setup kubectl
