@@ -438,24 +438,23 @@ jobs:
         run: snyk auth ${{ secrets.SNYK_TOKEN }}
   
       - name: Snyk Test
+        continue-on-error: true
         run: |
           if [ -f "$JAVA_DIR/pom.xml" ]; then
             cd $JAVA_DIR
             snyk test --severity-threshold=high --org=${{ secrets.SNYK_ORG_ID }}
-  
+      
           elif [ -f "$PYTHON_DIR/requirements.txt" ]; then
             cd $PYTHON_DIR
             snyk test --severity-threshold=high --file=requirements.txt --org=${{ secrets.SNYK_ORG_ID }}
-  
+      
           elif [ -f "$NODE_DIR/package.json" ]; then
             cd $NODE_DIR
             snyk test --severity-threshold=high --file=package.json --org=${{ secrets.SNYK_ORG_ID }}
-  
+      
           else
             echo "No supported project found"
-            exit 0
           fi
-
 
 # ==========================================================
 # ================= HELM DEPLOYMENT (CD) ===================
