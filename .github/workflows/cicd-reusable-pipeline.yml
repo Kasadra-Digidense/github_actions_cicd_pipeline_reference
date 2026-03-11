@@ -68,7 +68,7 @@ env:
   VERSION: v${{ github.run_number }}
   ECR_REPO: ${{ inputs.ecr_repo }}
   AWS_REGION: ${{ inputs.aws_region }}
-  AWS_ROLE: ${{ inputs.role_arn }}
+  ROLE_ARN: ${{ inputs.role_arn }}
   GCP_REGION: ${{ inputs.gcp_region }}
   HELM_PATH: ${{ inputs.helm_chart_path }}
   CODEARTIFACT_DOMAIN: ${{ inputs.codeartifact_domain }}
