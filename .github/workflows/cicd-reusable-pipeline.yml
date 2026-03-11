@@ -49,7 +49,11 @@ on:
 
       domain_owner:
         required: false
-        type: string      
+        type: string    
+
+      role_arn:
+        required: false
+        type: string  
 
 permissions:
   id-token: write
@@ -64,6 +68,7 @@ env:
   VERSION: v${{ github.run_number }}
   ECR_REPO: ${{ inputs.ecr_repo }}
   AWS_REGION: ${{ inputs.aws_region }}
+  AWS_ROLE: ${{ inputs.role_arn }}
   GCP_REGION: ${{ inputs.gcp_region }}
   HELM_PATH: ${{ inputs.helm_chart_path }}
   CODEARTIFACT_DOMAIN: ${{ inputs.codeartifact_domain }}
@@ -144,7 +149,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::088310115913:role/OpenID-Connect
+          role_arn: ${{ inputs.role_arn }}
           aws-region: ${{ inputs.aws_region }}
   
       # ---------------- Upload Full Repo Artifact ----------------
@@ -325,7 +330,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role_arn: ${{ inputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to AWS ECR
@@ -473,7 +478,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE }}
+          role_arn: ${{ inputs.role_arn }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Update kubeconfig
