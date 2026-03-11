@@ -51,7 +51,7 @@ on:
         required: false
         type: string    
 
-      role_arn:
+      role-to-assume:
         required: false
         type: string  
 
@@ -68,7 +68,7 @@ env:
   VERSION: v${{ github.run_number }}
   ECR_REPO: ${{ inputs.ecr_repo }}
   AWS_REGION: ${{ inputs.aws_region }}
-  ROLE_ARN: ${{ inputs.role_arn }}
+  ROLE_ARN : ${{ inputs.role-to-assume }}
   GCP_REGION: ${{ inputs.gcp_region }}
   HELM_PATH: ${{ inputs.helm_chart_path }}
   CODEARTIFACT_DOMAIN: ${{ inputs.codeartifact_domain }}
@@ -149,7 +149,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role_arn: ${{ inputs.role_arn }}
+          role-to-assume: ${{ env.ROLE_ARN }}
           aws-region: ${{ inputs.aws_region }}
   
       # ---------------- Upload Full Repo Artifact ----------------
@@ -330,7 +330,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role_arn: ${{ inputs.role_arn }}
+          role-to-assume: ${{ env.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Login to AWS ECR
@@ -478,7 +478,7 @@ jobs:
         if: inputs.cloud == 'aws'
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role_arn: ${{ inputs.role_arn }}
+          role-to-assume: ${{ env.ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Update kubeconfig
