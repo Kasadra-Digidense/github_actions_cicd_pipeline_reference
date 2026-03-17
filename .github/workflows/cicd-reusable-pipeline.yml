@@ -27,6 +27,10 @@ on:
         required: false
         type: string
 
+      react_dir:   
+          required: false
+          type: string    
+
       image_name:
         required: false
         type: string
@@ -64,6 +68,7 @@ env:
   JAVA_DIR: ${{ inputs.java_dir }}
   PYTHON_DIR: ${{ inputs.python_dir }}
   NODE_DIR: ${{ inputs.node_dir }}
+  REACT_DIR: ${{ inputs.react_dir }} 
   IMAGE_NAME: ${{ inputs.image_name }}
   VERSION: v${{ github.run_number }}
   ECR_REPO: ${{ inputs.ecr_repo }}
@@ -131,6 +136,45 @@ jobs:
           cd $NODE_DIR
           npm install
           npm test -- --watchAll=false
+
+# ---------------- REACT (Frontend) ----------------
+
+      - name: Setup Node (React)
+        if: ${{ hashFiles(format('{0}/package.json', env.REACT_DIR)) != '' }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: React Install & Test
+        if: ${{ hashFiles(format('{0}/package.json', env.REACT_DIR)) != '' }}
+        run: |
+          cd $REACT_DIR
+          npm install
+          
+          # Run tests only if present
+          if npm run | grep -q "test"; then
+            npm test -- --watchAll=false
+          else
+            echo "No React tests found, skipping"
+          fi
+
+      - name: React Build
+        if: ${{ hashFiles(format('{0}/package.json', env.REACT_DIR)) != '' }}
+        run: |
+          cd $REACT_DIR
+          npm run build
+          echo "React build completed ✅"
+
+      - name: Upload React Artifact
+        if: ${{ hashFiles(format('{0}/package.json', env.REACT_DIR)) != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: react-build-${{ github.run_number }}
+          path: |
+            ${{ env.REACT_DIR }}/build
+            ${{ env.REACT_DIR }}/dist
+          if-no-files-found: ignore
+          
 
 # # ==========================================================
 # # =================  UPLOAD ARTIFACT =======================
